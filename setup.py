@@ -14,9 +14,9 @@ def read(filename):
 
 
 setup(
-    name="hamsclient",
-    version="0.1.1",
-    url="https://github.com/websylv/meteoswiss",
+    name="hamsclientfork",
+    version="0.2.3",
+    url="https://github.com/Rudd-O/hamsclientfork",
     license='MIT',
 
     author="websylv",
