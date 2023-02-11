@@ -7,6 +7,7 @@ import requests
 
 from bs4 import BeautifulSoup
 from enum import Enum
+from typing import Any
 
 
 class StationType(str, Enum):
@@ -154,18 +155,29 @@ class meteoSwissClient:
             elif line["Type de station"] == STATION_TYPE_WEATHER:
                 stationData["type"] = StationType.WEATHER
             else:
-                assert 0, "not reached, station type %s" % line["Type de station"]
+                assert 0, "unknown station type %s" % line["Type de station"]
             stationList[stationData["code"]] = stationData
         return stationList
+
+    def get_all_stations(
+        self,
+        station_type=StationType | None,
+    ) -> dict[str, Any]:
+        if self._allStations is None:
+            self._allStations = self.__get_all_stations()
+        s: dict[str, Any] = {}
+        for station_name, station in self._allStations.items():
+            if station_type is not None and station["type"] != station_type:
+                continue
+            s[station_name] = station
+        return s
 
     def get_closest_station(
         self, currentLat, currnetLon, station_type=StationType | None
     ):
-        if self._allStations is None:
-            self._allStations = self.__get_all_stations()
         hPoint = geopy.Point(currentLat, currnetLon)
         data = []
-        for station in self._allStations:
+        for station_name, station in self.get_all_stations(station_type).items():
             if station_type is not None and station["type"] != station_type:
                 # User has requested a specific station type
                 # and this station is not of that type.
@@ -173,12 +185,12 @@ class meteoSwissClient:
             sPoint = geopy.Point(
                 "%s/%s"
                 % (
-                    self._allStations[station]["lat"],
-                    self._allStations[station]["lon"],
+                    station["lat"],
+                    station["lon"],
                 )
             )
             distance = geopy.distance.distance(hPoint, sPoint)
-            data += ((distance.km, station),)
+            data += ((distance.km, station_name),)
         data.sort(key=lambda tup: tup[0])
         try:
             return data[0][1]
@@ -195,7 +207,7 @@ class meteoSwissClient:
 
         try:
             return self._allStations[stationId]["name"]
-        except:
+        except Exception:
             _LOGGER.warning("Unable to find station name for : %s" % (stationId))
             return None
 

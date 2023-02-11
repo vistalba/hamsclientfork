@@ -15,7 +15,7 @@ def read(filename):
 
 setup(
     name="hamsclientfork",
-    version="0.2.4",
+    version="0.2.5",
     url="https://github.com/Rudd-O/hamsclientfork",
     license="MIT",
     author="websylv",
