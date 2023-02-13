@@ -211,7 +211,7 @@ class meteoSwissClient:
             _LOGGER.warning("Unable to find station name for : %s" % (stationId))
             return None
 
-    def getPostCode(self, lat, lon):
+    def getGeoData(self, lat, lon):
         s = requests.Session()
         lat = str(lat)
         lon = str(lon)
@@ -229,11 +229,14 @@ class meteoSwissClient:
             + lon
             + "&zoom=18"
         ).text
-        _LOGGER.debug("Got data from opensteetmap: %s" % (geoData))
-        geoData = json.loads(geoData)
+        _LOGGER.debug("Got data from OpenStreetMap: %s" % (geoData))
+        return json.loads(geoData)
+
+    def getPostCode(self, lat, lon):
+        geoData = self.getGeoData(lat, lon)
         try:
             return geoData["address"]["postcode"]
-        except:
+        except Exception:
             _LOGGER.warning(
                 "Unable to get post code for location lat : %s lon : %s" % (lat, lon)
             )
