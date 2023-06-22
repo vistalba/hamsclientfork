@@ -3,11 +3,11 @@ import geopy.distance
 import json
 import logging
 import pandas as pd
-import requests
+import requests  # type: ignore
 
 from bs4 import BeautifulSoup
 from enum import Enum
-from typing import Any
+from typing import Any, TypedDict
 
 
 class StationType(str, Enum):
@@ -18,6 +18,14 @@ class StationType(str, Enum):
 
 
 _LOGGER = logging.getLogger(__name__)
+
+_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;"
+    "q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate, sdch",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML"
+    ", like Gecko) Chrome/1337 Safari/537.36",
+}
 
 MS_BASE_URL = "https://www.meteosuisse.admin.ch"
 JSON_FORECAST_URL = "https://app-prod-ws.meteoswiss-app.ch/v1/forecast?plz={}00&graph=false&warning=true"
@@ -33,6 +41,120 @@ MS_24FORECAST_URL = (
     "https://www.meteosuisse.admin.ch/product/output/forecast-chart/{}/fr/{}00.json"
 )
 MS_24FORECAST_REF = "https://www.meteosuisse.admin.ch//content/meteoswiss/fr/home.mobile.meteo-products--overview.html"
+
+
+class CurrentWeather(TypedDict):
+    time: int
+    icon: int
+    iconV2: int
+    temperature: float
+
+
+class DayForecast(TypedDict):
+    dayDate: str
+    iconDay: int
+    iconDayV2: int
+    temperatureMax: float
+    temperatureMin: float
+    precipitation: float
+
+
+def DayForecast_from_meteoswiss_data(data: dict[str, Any]) -> DayForecast:
+    return DayForecast(
+        dayDate=data["dayDate"],
+        iconDay=int(data["iconDay"]),
+        iconDayV2=int(data["iconDayV2"]),
+        temperatureMax=float(data["temperatureMax"]),
+        temperatureMin=float(data["temperatureMin"]),
+        precipitation=float(data["precipitation"]),
+    )
+
+
+class Forecast(TypedDict):
+    plz: str
+    currentWeather: CurrentWeather
+    regionForecast: list[DayForecast]
+
+
+def Forecast_from_meteoswiss_data(data: dict[str, Any]):
+    return Forecast(
+        plz=data["plz"],
+        currentWeather=data["currentWeather"],
+        regionForecast=[
+            DayForecast_from_meteoswiss_data(x) for x in data["regionForecast"]
+        ],
+    )
+
+
+class CurrentCondition(TypedDict):
+    station: str
+    date: int
+    tre200s0: float | None
+    rre150z0: float | None
+    sre000z0: float | None
+    gre000z0: float | None
+    ure200s0: float | None
+    tde200s0: float | None
+    dkl010z0: float | None
+    fu3010z0: float | None
+    fu3010z1: float | None
+    prestas0: float | None
+    pp0qffs0: float | None
+    pp0qnhs0: float | None
+    ppz850s0: float | None
+    ppz700s0: float | None
+    dv1towz0: float | None
+    fu3towz0: float | None
+    fu3towz1: float | None
+    ta1tows0: float | None
+    uretows0: float | None
+    tdetows0: float | None
+
+
+def CurrentCondition_from_meteoswiss_data(data: dict[str, Any]) -> CurrentCondition:
+    def floatornone(val: Any) -> float | None:
+        if val == "" or val == "-":
+            return None
+        return float(val)
+
+    return CurrentCondition(
+        station=data["Station/Location"],
+        date=int(data["Date"]),
+        tre200s0=floatornone(data["tre200s0"]),
+        rre150z0=floatornone(data["rre150z0"]),
+        sre000z0=floatornone(data["sre000z0"]),
+        gre000z0=floatornone(data["gre000z0"]),
+        ure200s0=floatornone(data["ure200s0"]),
+        tde200s0=floatornone(data["tde200s0"]),
+        dkl010z0=floatornone(data["dkl010z0"]),
+        fu3010z0=floatornone(data["fu3010z0"]),
+        fu3010z1=floatornone(data["fu3010z1"]),
+        prestas0=floatornone(data["prestas0"]),
+        pp0qffs0=floatornone(data["pp0qffs0"]),
+        pp0qnhs0=floatornone(data["pp0qnhs0"]),
+        ppz850s0=floatornone(data["ppz850s0"]),
+        ppz700s0=floatornone(data["ppz700s0"]),
+        dv1towz0=floatornone(data["dv1towz0"]),
+        fu3towz0=floatornone(data["fu3towz0"]),
+        fu3towz1=floatornone(data["fu3towz1"]),
+        ta1tows0=floatornone(data["ta1tows0"]),
+        uretows0=floatornone(data["uretows0"]),
+        tdetows0=floatornone(data["tdetows0"]),
+    )
+
+
+class ClientResult(TypedDict):
+    name: str
+    forecast: list[Forecast]
+    condition: list[CurrentCondition]
+
+
+def ClientResult_from_meteoswiss_data(data: dict[str, Any]) -> ClientResult:
+    return ClientResult(
+        name=data["name"],
+        forecast=Forecast_from_meteoswiss_data(data["forecast"]),
+        condition=[CurrentCondition_from_meteoswiss_data(x) for x in data["condition"]],
+    )
 
 
 class meteoSwissClient:
@@ -58,17 +180,15 @@ class meteoSwissClient:
             "condition": self._condition,
         }
 
+    def get_typed_data(self) -> ClientResult:
+        data = self.get_data()
+        return ClientResult_from_meteoswiss_data(data)
+
     def get_24hforecast(self):
         _LOGGER.debug("Start update 24h forecast data")
         s = requests.Session()
         # Forcing headers to avoid 500 error when downloading file
-        s.headers.update(
-            {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate, sdch",
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/1337 Safari/537.36",
-            }
-        )
+        s.headers.update(_HEADERS)
         searchUrl = MS_SEARCH_URL.format(self._postCode)
         _LOGGER.debug("Main URL : %s" % searchUrl)
         tmpSearch = s.get(searchUrl, timeout=10)
@@ -101,13 +221,7 @@ class meteoSwissClient:
         _LOGGER.debug("Start update forecast data")
         s = requests.Session()
         # Forcing headers to avoid 500 error when downloading file
-        s.headers.update(
-            {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate, sdch",
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/1337 Safari/537.36",
-            }
-        )
+        s.headers.update(_HEADERS)
 
         jsonUrl = JSON_FORECAST_URL.format(self._postCode)
         jsonData = s.get(jsonUrl, timeout=10)
@@ -194,7 +308,7 @@ class meteoSwissClient:
         data.sort(key=lambda tup: tup[0])
         try:
             return data[0][1]
-        except:
+        except BaseException:
             _LOGGER.warning(
                 "Unable to get closest station for lat : %s lon : %s"
                 % (currentLat, currnetLon)
@@ -215,13 +329,8 @@ class meteoSwissClient:
         s = requests.Session()
         lat = str(lat)
         lon = str(lon)
-        s.headers.update(
-            {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate, sdch",
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/1337 Safari/537.36",
-            }
-        )
+        s.headers.update(_HEADERS)
+
         geoData = s.get(
             "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="
             + lat
