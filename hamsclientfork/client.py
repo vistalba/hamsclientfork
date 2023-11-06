@@ -20,8 +20,7 @@ class StationType(str, Enum):
 _LOGGER = logging.getLogger(__name__)
 
 _HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;"
-    "q=0.9,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/json",
     "Accept-Encoding": "gzip, deflate, sdch",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML"
     ", like Gecko) Chrome/1337 Safari/537.36",
