@@ -2,8 +2,8 @@ import geopy
 import geopy.distance
 import json
 import logging
-import pandas as pd
 import requests  # type: ignore
+import csv
 
 from bs4 import BeautifulSoup
 from enum import Enum
@@ -234,12 +234,13 @@ class meteoSwissClient:
 
     def get_current_condition(self):
         _LOGGER.debug("Update current condition")
-
-        data = pd.read_csv(CURRENT_CONDITION_URL, sep=";", header=0)
+        with requests.get(CURRENT_CONDITION_URL) as response:
+            lines = response.text.split('\n')
+            csv_reader = csv.DictReader(lines, delimiter=';')
+            data = [row for row in csv_reader if row]
 
         _LOGGER.debug("Get current condition for : %s" % self._station)
-        stationData = data.loc[data["Station/Location"].str.contains(self._station)]
-        stationData = stationData.to_dict("records")
+        stationData = [row for row in data if row["Station/Location"].find(self._station) != -1]
         self._condition = stationData
 
     def update(self):
@@ -248,16 +249,13 @@ class meteoSwissClient:
 
     def __get_all_stations(self):
         _LOGGER.debug("Getting all stations from : %s" % (STATION_URL))
-        data = pd.read_csv(
-            STATION_URL,
-            sep=";",
-            header=0,
-            skipfooter=4,
-            encoding="latin1",
-            engine="python",
-        )
+        with requests.get(STATION_URL) as response:
+            lines = response.text.split('\n')
+            csv_reader = csv.DictReader(lines, delimiter=';')
+            data = [row for row in csv_reader if row]
+
         stationList = {}
-        for index, line in data.iterrows():
+        for line in data:
             stationData = {}
             stationData["code"] = line["Abr."]
             stationData["name"] = line["Station"]

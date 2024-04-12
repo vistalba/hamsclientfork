@@ -25,7 +25,6 @@ setup(
     packages=find_packages(exclude=("tests",)),
     install_requires=[
         "requests>=2.22.0",
-        "pandas>=0.25.3",
         "beautifulsoup4>=4.8.2",
         "geopy>=2.0.0",
     ],
