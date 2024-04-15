@@ -235,6 +235,7 @@ class meteoSwissClient:
     def get_current_condition(self):
         _LOGGER.debug("Update current condition")
         with requests.get(CURRENT_CONDITION_URL) as response:
+            response.encoding = 'iso_8859_1'
             lines = response.text.split('\n')
             csv_reader = csv.DictReader(lines, delimiter=';')
             data = [row for row in csv_reader if row]
@@ -250,12 +251,15 @@ class meteoSwissClient:
     def __get_all_stations(self):
         _LOGGER.debug("Getting all stations from : %s" % (STATION_URL))
         with requests.get(STATION_URL) as response:
+            response.encoding = 'iso_8859_1'
             lines = response.text.split('\n')
             csv_reader = csv.DictReader(lines, delimiter=';')
             data = [row for row in csv_reader if row]
 
         stationList = {}
         for line in data:
+            if line["Type de station"] != STATION_TYPE_PRECIPITATION and line["Type de station"] != STATION_TYPE_WEATHER:
+                continue
             stationData = {}
             stationData["code"] = line["Abr."]
             stationData["name"] = line["Station"]
@@ -267,7 +271,7 @@ class meteoSwissClient:
             elif line["Type de station"] == STATION_TYPE_WEATHER:
                 stationData["type"] = StationType.WEATHER
             else:
-                assert 0, "unknown station type %s" % line["Type de station"]
+                _LOGGER.debug("unknown station type %s" % line["Type de station"])
             stationList[stationData["code"]] = stationData
         return stationList
 
