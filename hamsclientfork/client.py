@@ -327,19 +327,22 @@ class meteoSwissClient:
 
     def getGeoData(self, lat, lon):
         s = requests.Session()
-        lat = str(lat)
-        lon = str(lon)
         s.headers.update(_HEADERS)
 
-        geoData = s.get(
-            "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="
-            + lat
-            + "&lon="
-            + lon
-            + "&zoom=18"
-        ).text
-        _LOGGER.debug("Got data from OpenStreetMap: %s" % (geoData))
-        return json.loads(geoData)
+        uri = (
+            "https://nominatim.openstreetmap.org/reverse"
+            f"?format=jsonv2&lat={lat}&lon={lon}&zoom=18"
+        )
+        _LOGGER.debug("Requesting Nominatim OSM data at URL %s", uri)
+        geoData_req = s.get(uri)
+        try:
+            geoData_req.raise_for_status()
+            geoData = geoData_req.json
+            _LOGGER.debug("Got data from OpenStreetMap: %s" % (geoData))
+            return geoData
+        except Exception:
+            _LOGGER.exception("Cannot get Nominatim OSM data: %s", geoData_req.text)
+            raise
 
     def getPostCode(self, lat, lon):
         geoData = self.getGeoData(lat, lon)
