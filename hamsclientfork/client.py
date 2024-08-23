@@ -190,7 +190,11 @@ def CurrentCondition_from_meteoswiss_data(data: dict[str, Any]) -> CurrentCondit
 class ClientResult(TypedDict):
     name: str
     forecast: Forecast
+    # A list of current conditions for the first station passed.
     condition: list[CurrentCondition]
+    # A dictionary of station -> list of the current condition
+    # returned by the corresponding station.
+    condition_by_station: dict[str, CurrentCondition]
 
 
 def ClientResult_from_meteoswiss_data(data: dict[str, Any]) -> ClientResult:
@@ -198,21 +202,26 @@ def ClientResult_from_meteoswiss_data(data: dict[str, Any]) -> ClientResult:
         name=data["name"],
         forecast=Forecast_from_meteoswiss_data(data["forecast"]),
         condition=[CurrentCondition_from_meteoswiss_data(x) for x in data["condition"]],
+        condition_by_station={
+            station: CurrentCondition_from_meteoswiss_data(condition)
+            for (station, condition) in data["condition_by_station"].items()
+        },
     )
 
 
 class meteoSwissClient:
-    def __init__(self, displayName=None, postcode=None, station=None):
+    def __init__(self, displayName=None, postcode=None, *station: str):
         _LOGGER.debug("MS Client INIT")
         self._postCode = postcode
-        self._station = station
+        self._stations = station
         self._name = displayName
-        self._allStations = None
+        self._allStations: dict[str, Any] | None = None
         self._condition = None
+        self._conditions: dict[str, Any] = {}
         self._forecast = None
         _LOGGER.debug(
-            "INIT meteoswiss client : name = %s station = %s postcode = %s"
-            % (self._name, self._station, self._postCode)
+            "INIT meteoswiss client : name = %s stations = %s postcode = %s"
+            % (self._name, self._stations, self._postCode)
         )
 
     def get_data(self):
@@ -222,6 +231,7 @@ class meteoSwissClient:
             "name": self._name,
             "forecast": self._forecast,
             "condition": self._condition,
+            "condition_by_station": self._conditions,
         }
 
     def get_typed_data(self) -> ClientResult:
@@ -277,19 +287,23 @@ class meteoSwissClient:
 
     def get_current_condition(self):
         _LOGGER.debug("Update current condition")
-
         data = pd.read_csv(CURRENT_CONDITION_URL, sep=";", header=0)
-
-        _LOGGER.debug("Get current condition for : %s" % self._station)
-        stationData = data.loc[data["Station/Location"].str.contains(self._station)]
-        stationData = stationData.to_dict("records")
-        self._condition = stationData
+        conditions = {}
+        condition_list = []
+        for station in self._stations:
+            _LOGGER.debug("Get current condition for : %s" % station)
+            stationData = data.loc[data["Station/Location"].str.contains(station)]
+            stationData = stationData.to_dict("records")
+            condition_list.extend(stationData)
+            conditions[station] = stationData[0]
+        self._condition = condition_list
+        self._conditions = conditions
 
     def update(self):
         self.get_forecast()
         self.get_current_condition()
 
-    def __get_all_stations(self):
+    def __get_all_stations(self) -> dict[str, Any]:
         _LOGGER.debug("Getting all stations from : %s" % (STATION_URL))
         data = pd.read_csv(
             STATION_URL,
