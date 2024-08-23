@@ -4,6 +4,7 @@ import json
 import logging
 import pandas as pd
 import requests  # type: ignore
+import datetime
 
 from bs4 import BeautifulSoup
 from enum import Enum
@@ -28,7 +29,7 @@ _HEADERS = {
 }
 
 MS_BASE_URL = "https://www.meteosuisse.admin.ch"
-JSON_FORECAST_URL = "https://app-prod-ws.meteoswiss-app.ch/v1/forecast?plz={}00&graph=false&warning=true"
+JSON_FORECAST_URL = "https://app-prod-ws.meteoswiss-app.ch/v1/forecast?plz={}00&graph_startLowResolution=true&warning=true"
 MS_SEARCH_URL = "https://www.meteosuisse.admin.ch/home/actualite/infos.html?ort={}&pageIndex=0&tab=search_tab"
 CURRENT_CONDITION_URL = (
     "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-aktuell/VQHA80.csv"
@@ -70,19 +71,60 @@ def DayForecast_from_meteoswiss_data(data: dict[str, Any]) -> DayForecast:
     )
 
 
+class HourlyForecast(TypedDict):
+    time: datetime.datetime
+    temperatureMax: float
+    temperatureMean: float
+    temperatureMin: float
+    precipitationMax: float
+    precipitationMean: float
+    precipitationMin: float
+
+
+def HourlyForecast_from_meteoswiss_data(data: dict[str, Any]) -> list[HourlyForecast]:
+    time = datetime.datetime.fromtimestamp(data["start"] / 1000)
+    results: list[HourlyForecast] = []
+    for idx in range(
+        min(
+            [
+                len(data["temperatureMin1h"]),
+                len(data["temperatureMax1h"]),
+                len(data["temperatureMean1h"]),
+                len(data["precipitationMin1h"]),
+                len(data["precipitationMean1h"]),
+                len(data["precipitationMax1h"]),
+            ]
+        )
+    ):
+        d = HourlyForecast(
+            time=time,
+            temperatureMax=data["temperatureMax1h"][idx],
+            temperatureMean=data["temperatureMean1h"][idx],
+            temperatureMin=data["temperatureMin1h"][idx],
+            precipitationMin=data["precipitationMin1h"][idx],
+            precipitationMean=data["precipitationMean1h"][idx],
+            precipitationMax=data["precipitationMax1h"][idx],
+        )
+        results.append(d)
+        time = time + datetime.timedelta(hours=1)
+    return results
+
+
 class Forecast(TypedDict):
     plz: str
     currentWeather: CurrentWeather
     regionForecast: list[DayForecast]
+    regionHourlyForecast: list[HourlyForecast]
 
 
-def Forecast_from_meteoswiss_data(data: dict[str, Any]):
+def Forecast_from_meteoswiss_data(data: dict[str, Any]) -> Forecast:
     return Forecast(
         plz=data["plz"],
         currentWeather=data["currentWeather"],
         regionForecast=[
             DayForecast_from_meteoswiss_data(x) for x in data["regionForecast"]
         ],
+        regionHourlyForecast=HourlyForecast_from_meteoswiss_data(data["graph"]),
     )
 
 
@@ -145,7 +187,7 @@ def CurrentCondition_from_meteoswiss_data(data: dict[str, Any]) -> CurrentCondit
 
 class ClientResult(TypedDict):
     name: str
-    forecast: list[Forecast]
+    forecast: Forecast
     condition: list[CurrentCondition]
 
 
@@ -218,19 +260,18 @@ class meteoSwissClient:
         _LOGGER.debug("End of 24 forecast udate")
 
     def get_forecast(self):
-        _LOGGER.debug("Start update forecast data")
         s = requests.Session()
         # Forcing headers to avoid 500 error when downloading file
         s.headers.update(_HEADERS)
 
         jsonUrl = JSON_FORECAST_URL.format(self._postCode)
+        _LOGGER.debug("Start update forecast data with URL %s", jsonUrl)
         jsonData = s.get(jsonUrl, timeout=10)
-        jsonDataTxt = jsonData.text
-
-        jsonObj = json.loads(jsonDataTxt)
+        jsonData.raise_for_status()
+        jsonObj = jsonData.json()
 
         self._forecast = jsonObj
-        _LOGGER.debug("End of forecast udate")
+        _LOGGER.debug("End of forecast update")
 
     def get_current_condition(self):
         _LOGGER.debug("Update current condition")
