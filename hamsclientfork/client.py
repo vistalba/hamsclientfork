@@ -82,7 +82,9 @@ class HourlyForecast(TypedDict):
 
 
 def HourlyForecast_from_meteoswiss_data(data: dict[str, Any]) -> list[HourlyForecast]:
-    time = datetime.datetime.fromtimestamp(data["start"] / 1000)
+    time = datetime.datetime.fromtimestamp(
+        data["start"] / 1000, tz=datetime.timezone.utc
+    )
     results: list[HourlyForecast] = []
     for idx in range(
         min(
