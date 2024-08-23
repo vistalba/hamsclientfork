@@ -297,8 +297,7 @@ class meteoSwissClient:
         condition_list = []
         for station in self._stations:
             _LOGGER.debug("Get current condition for : %s" % station)
-            stationData = data.loc[data["Station/Location"].str.contains(station)]
-            stationData = stationData.to_dict("records")
+            stationData = [d for d in data if d["Station/Location"] == station]
             condition_list.extend(stationData)
             if stationData:
                 conditions[station] = stationData[0]
