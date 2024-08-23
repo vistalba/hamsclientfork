@@ -325,9 +325,11 @@ class meteoSwissClient:
             _LOGGER.warning("Unable to find station name for : %s" % (stationId))
             return None
 
-    def getGeoData(self, lat, lon):
+    def getGeoData(self, lat, lon, user_agent=None):
         s = requests.Session()
         s.headers.update(_HEADERS)
+        if user_agent:
+            s.headers.update({"User-Agent": user_agent})
 
         uri = (
             "https://nominatim.openstreetmap.org/reverse"
@@ -337,7 +339,7 @@ class meteoSwissClient:
         geoData_req = s.get(uri)
         try:
             geoData_req.raise_for_status()
-            geoData = geoData_req.json
+            geoData = geoData_req.json()
             _LOGGER.debug("Got data from OpenStreetMap: %s" % (geoData))
             return geoData
         except Exception:
