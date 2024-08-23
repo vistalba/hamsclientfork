@@ -15,7 +15,7 @@ def read(filename):
 
 setup(
     name="hamsclientfork",
-    version="0.2.14",
+    version="0.2.15",
     url="https://github.com/Rudd-O/hamsclientfork",
     license="MIT",
     author="websylv",
@@ -25,7 +25,6 @@ setup(
     packages=find_packages(exclude=("tests",)),
     install_requires=[
         "requests>=2.22.0",
-        "pandas>=0.25.3",
         "beautifulsoup4>=4.8.2",
         "geopy>=2.0.0",
     ],

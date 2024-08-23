@@ -2,9 +2,9 @@ import geopy
 import geopy.distance
 import json
 import logging
-import pandas as pd
 import requests  # type: ignore
 import datetime
+import csv
 
 from bs4 import BeautifulSoup
 from enum import Enum
@@ -287,7 +287,12 @@ class meteoSwissClient:
 
     def get_current_condition(self):
         _LOGGER.debug("Update current condition")
-        data = pd.read_csv(CURRENT_CONDITION_URL, sep=";", header=0)
+        with requests.get(CURRENT_CONDITION_URL) as response:
+            response.raise_for_status()
+            response.encoding = "iso_8859_1"
+            lines = response.text.split("\n")
+            csv_reader = csv.DictReader(lines, delimiter=";")
+            data = [row for row in csv_reader if row]
         conditions = {}
         condition_list = []
         for station in self._stations:
@@ -306,16 +311,19 @@ class meteoSwissClient:
 
     def __get_all_stations(self) -> dict[str, Any]:
         _LOGGER.debug("Getting all stations from : %s" % (STATION_URL))
-        data = pd.read_csv(
-            STATION_URL,
-            sep=";",
-            header=0,
-            skipfooter=4,
-            encoding="latin1",
-            engine="python",
-        )
+        with requests.get(STATION_URL) as response:
+            response.encoding = "iso_8859_1"
+            lines = response.text.split("\n")
+            csv_reader = csv.DictReader(lines, delimiter=";")
+            data = [row for row in csv_reader if row]
+
         stationList = {}
-        for index, line in data.iterrows():
+        for line in data:
+            if (
+                line["Type de station"] != STATION_TYPE_PRECIPITATION
+                and line["Type de station"] != STATION_TYPE_WEATHER
+            ):
+                continue
             stationData = {}
             stationData["code"] = line["Abr."]
             stationData["name"] = line["Station"]
@@ -327,7 +335,7 @@ class meteoSwissClient:
             elif line["Type de station"] == STATION_TYPE_WEATHER:
                 stationData["type"] = StationType.WEATHER
             else:
-                assert 0, "unknown station type %s" % line["Type de station"]
+                _LOGGER.debug("unknown station type %s" % line["Type de station"])
             stationList[stationData["code"]] = stationData
         return stationList
 
