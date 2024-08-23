@@ -295,7 +295,8 @@ class meteoSwissClient:
             stationData = data.loc[data["Station/Location"].str.contains(station)]
             stationData = stationData.to_dict("records")
             condition_list.extend(stationData)
-            conditions[station] = stationData[0]
+            if stationData:
+                conditions[station] = stationData[0]
         self._condition = condition_list
         self._conditions = conditions
 
