@@ -34,6 +34,9 @@ MS_SEARCH_URL = "https://www.meteosuisse.admin.ch/home/actualite/infos.html?ort=
 CURRENT_CONDITION_URL = (
     "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-aktuell/VQHA80.csv"
 )
+CURRENT_PRECIPITATION_URL = (
+    "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-aktuell/VQHA98.csv"
+)
 STATION_URL = "https://data.geo.admin.ch/ch.meteoschweiz.messnetz-automatisch/ch.meteoschweiz.messnetz-automatisch_fr.csv"
 STATION_TYPE_PRECIPITATION = "Précipitation"
 STATION_TYPE_WEATHER = "Station météo"
@@ -157,33 +160,33 @@ class CurrentCondition(TypedDict):
 
 def CurrentCondition_from_meteoswiss_data(data: dict[str, Any]) -> CurrentCondition:
     def floatornone(val: Any) -> float | None:
-        if val == "" or val == "-":
+        if val == "" or val == "-" or val is None:
             return None
         return float(val)
 
     return CurrentCondition(
         station=data["Station/Location"],
         date=int(data["Date"]),
-        tre200s0=floatornone(data["tre200s0"]),
-        rre150z0=floatornone(data["rre150z0"]),
-        sre000z0=floatornone(data["sre000z0"]),
-        gre000z0=floatornone(data["gre000z0"]),
-        ure200s0=floatornone(data["ure200s0"]),
-        tde200s0=floatornone(data["tde200s0"]),
-        dkl010z0=floatornone(data["dkl010z0"]),
-        fu3010z0=floatornone(data["fu3010z0"]),
-        fu3010z1=floatornone(data["fu3010z1"]),
-        prestas0=floatornone(data["prestas0"]),
-        pp0qffs0=floatornone(data["pp0qffs0"]),
-        pp0qnhs0=floatornone(data["pp0qnhs0"]),
-        ppz850s0=floatornone(data["ppz850s0"]),
-        ppz700s0=floatornone(data["ppz700s0"]),
-        dv1towz0=floatornone(data["dv1towz0"]),
-        fu3towz0=floatornone(data["fu3towz0"]),
-        fu3towz1=floatornone(data["fu3towz1"]),
-        ta1tows0=floatornone(data["ta1tows0"]),
-        uretows0=floatornone(data["uretows0"]),
-        tdetows0=floatornone(data["tdetows0"]),
+        tre200s0=floatornone(data.get("tre200s0")),
+        rre150z0=floatornone(data.get("rre150z0")),
+        sre000z0=floatornone(data.get("sre000z0")),
+        gre000z0=floatornone(data.get("gre000z0")),
+        ure200s0=floatornone(data.get("ure200s0")),
+        tde200s0=floatornone(data.get("tde200s0")),
+        dkl010z0=floatornone(data.get("dkl010z0")),
+        fu3010z0=floatornone(data.get("fu3010z0")),
+        fu3010z1=floatornone(data.get("fu3010z1")),
+        prestas0=floatornone(data.get("prestas0")),
+        pp0qffs0=floatornone(data.get("pp0qffs0")),
+        pp0qnhs0=floatornone(data.get("pp0qnhs0")),
+        ppz850s0=floatornone(data.get("ppz850s0")),
+        ppz700s0=floatornone(data.get("ppz700s0")),
+        dv1towz0=floatornone(data.get("dv1towz0")),
+        fu3towz0=floatornone(data.get("fu3towz0")),
+        fu3towz1=floatornone(data.get("fu3towz1")),
+        ta1tows0=floatornone(data.get("ta1tows0")),
+        uretows0=floatornone(data.get("uretows0")),
+        tdetows0=floatornone(data.get("tdetows0")),
     )
 
 
@@ -192,7 +195,7 @@ class ClientResult(TypedDict):
     forecast: Forecast
     # A list of current conditions for the first station passed.
     condition: list[CurrentCondition]
-    # A dictionary of station -> list of the current condition
+    # A dictionary of station -> list of the current precipitation
     # returned by the corresponding station.
     condition_by_station: dict[str, CurrentCondition]
 
@@ -218,6 +221,8 @@ class meteoSwissClient:
         self._allStations: dict[str, Any] | None = None
         self._condition = None
         self._conditions: dict[str, Any] = {}
+        self._precipitation = None
+        self._precipitations: dict[str, Any] = {}
         self._forecast = None
         _LOGGER.debug(
             "INIT meteoswiss client : name = %s stations = %s postcode = %s"
@@ -293,11 +298,30 @@ class meteoSwissClient:
             lines = response.text.split("\n")
             csv_reader = csv.DictReader(lines, delimiter=";")
             data = [row for row in csv_reader if row]
+        with requests.get(CURRENT_PRECIPITATION_URL) as response:
+            response.raise_for_status()
+            response.encoding = "iso_8859_1"
+            lines = response.text.split("\n")
+            csv_reader = csv.DictReader(lines, delimiter=";")
+            rain_data = [row for row in csv_reader if row]
         conditions = {}
         condition_list = []
         for station in self._stations:
             _LOGGER.debug("Get current condition for : %s" % station)
             stationData = [d for d in data if d["Station/Location"] == station]
+            rainData = [d for d in rain_data if d["Station/Location"] == station]
+            if rainData and not stationData:
+                stationData = rainData
+            elif rainData and stationData:
+                # Add all values from the rain data to the station data.
+                for k, v in rainData.items():
+                    stationData[k] = v
+            else:
+                # if
+                # (stationData and not rainData)
+                # or
+                # (not stationData and not rainData)
+                pass
             condition_list.extend(stationData)
             if stationData:
                 conditions[station] = stationData[0]
