@@ -192,7 +192,7 @@ def CurrentCondition_from_meteoswiss_data(data: dict[str, Any]) -> CurrentCondit
 
 class ClientResult(TypedDict):
     name: str
-    forecast: Forecast
+    forecast: Forecast | None
     # A list of current conditions for the first station passed.
     condition: list[CurrentCondition]
     # A dictionary of station -> list of the current precipitation
@@ -201,9 +201,13 @@ class ClientResult(TypedDict):
 
 
 def ClientResult_from_meteoswiss_data(data: dict[str, Any]) -> ClientResult:
+    if not data["forecast"].get("plz"):  # PLZ came back as zero or None, no forecast
+        forecast = None
+    else:
+        forecast = Forecast_from_meteoswiss_data(data["forecast"])
     return ClientResult(
         name=data["name"],
-        forecast=Forecast_from_meteoswiss_data(data["forecast"]),
+        forecast=forecast,
         condition=[CurrentCondition_from_meteoswiss_data(x) for x in data["condition"]],
         condition_by_station={
             station: CurrentCondition_from_meteoswiss_data(condition)
